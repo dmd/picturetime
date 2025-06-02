@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SRC_DIR="aligned"
+DST_DIR="web4up"
+WIDTH=300
+HEIGHT=400
+
+find "$SRC_DIR" -type f -name '*.jpg' | while read -r SRC_PATH; do
+  REL_PATH="${SRC_PATH#${SRC_DIR}/}"
+  DST_PATH="$DST_DIR/$REL_PATH"
+
+  mkdir -p "$(dirname "$DST_PATH")"
+
+  # Skip resizing if the destination image already exists
+  if [[ -f "$DST_PATH" ]]; then
+    echo "Skipping existing image: $DST_PATH" >&2
+  else
+    # Use ImageMagick 7 'magick' command (convert is deprecated)
+    magick "$SRC_PATH" -resize "${WIDTH}x${HEIGHT}" "$DST_PATH"
+  fi
+done
+
+(
+  cd "$DST_DIR"
+  find * -type f -name '*.jpg' > filenames.txt
+)
+
+rsync -r --delete web4up/ 3e.org:3e.org/timelapse/

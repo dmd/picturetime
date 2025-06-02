@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Timeline</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: rgb(244, 244, 235);
+            color: #333;
+            margin: 0;
+            padding: 10px;
+            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 95vw;
+            margin: 0 auto;
+            height: 100vh;
+            max-height: 100vh;
+            padding: 10px;
+        }
+        .grid-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            grid-gap: 10px;
+            margin-bottom: 15px;
+            width: 100%;
+            max-width: 95vw;
+            max-height: 75vh;
+            height: auto;
+            flex: 1;
+        }
+        
+        @media (min-aspect-ratio: 16/9) {
+            .grid-container {
+                grid-template-columns: 1fr 1fr 1fr 1fr;
+                grid-template-rows: 1fr;
+            }
+        }
+        .image-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            background-color: #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+        }
+        .image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+        }
+        .no-image-text {
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+            padding: 10px;
+            display: none;
+        }
+        .image-label {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0, 0, 0, 0.5);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .slider-container {
+            width: 100%;
+            max-width: 95vw;
+            padding: 10px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .date-controls {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            width: 100%;
+        }
+        .controls-left {
+            display: flex;
+            gap: 8px;
+        }
+        .date-display {
+            flex: 1;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 500;
+            color: #555;
+            min-height: 28px;
+        }
+        .control-button {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 3px;
+            color: #555;
+            transition: color 0.2s, background-color 0.2s;
+        }
+        .control-button:hover {
+            background-color: rgba(0, 0, 0, 0.1);
+            color: #333;
+        }
+        .control-button:disabled {
+            color: #ccc;
+            cursor: not-allowed;
+        }
+        .control-button:disabled:hover {
+            background: none;
+        }
+        .slider {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .date-range {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.9rem;
+            color: #777;
+            margin-top: 5px;
+        }
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(244, 244, 235, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s ease-out;
+        }
+        .loading-overlay.fade-out {
+            opacity: 0;
+            pointer-events: none;
+        }
+        .loading-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid #ddd;
+            border-top: 4px solid #555;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .loading-text {
+            font-size: 1.1rem;
+            color: #555;
+            margin-bottom: 10px;
+        }
+        .loading-progress {
+            font-size: 0.9rem;
+            color: #777;
+        }
+        .main-content {
+            opacity: 0;
+            transition: opacity 0.5s ease-in;
+        }
+        .main-content.loaded {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading images...</div>
+        <div class="loading-progress" id="loadingProgress">0 / 0</div>
+    </div>
+    <div class="container main-content" id="mainContent">
+        <div class="grid-container">
+            <div class="image-container">
+                <img id="capyImage" src="" alt="Capybara image">
+                <div class="image-label">Capy</div>
+                <div id="capyNoImage" class="no-image-text">No Picture Time for Capy yet!</div>
+            </div>
+            <div class="image-container">
+                <img id="platyImage" src="" alt="Platy image">
+                <div class="image-label">Platy</div>
+                <div id="platyNoImage" class="no-image-text">No Picture Time for Platy yet!</div>
+            </div>
+            <div class="image-container">
+                <img id="mamaImage" src="" alt="Mama image">
+                <div class="image-label">Mama</div>
+                <div id="mamaNoImage" class="no-image-text">No Picture Time for Mama yet!</div>
+            </div>
+            <div class="image-container">
+                <img id="dadaImage" src="" alt="Dada image">
+                <div class="image-label">Dada</div>
+                <div id="dadaNoImage" class="no-image-text">No Picture Time for Dada yet!</div>
+            </div>
+        </div>
+        <div class="slider-container">
+            <div class="date-controls">
+                <div class="controls-left">
+                    <button id="playButton" class="control-button">▶</button>
+                    <button id="pauseButton" class="control-button" disabled>⏸</button>
+                </div>
+                <div class="date-display" id="currentDate"></div>
+            </div>
+            <input type="range" min="0" max="100" value="0" class="slider" id="timeSlider">
+            <div class="date-range">
+                <span id="startDate"></span>
+                <span id="endDate"></span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Image collections
+        const imageCollections = {
+            capy: [],
+            dada: [],
+            mama: [],
+            platy: []
+        };
+        
+        // Preloaded image cache
+        const preloadedImages = new Map();
+        
+        // All dates in chronological order
+        let allDates = [];
+        
+        // Animation control
+        let isPlaying = false;
+        let animationInterval = null;
+        
+        // Initialize from filenames.txt
+        fetch('filenames.txt')
+            .then(response => response.text())
+            .then(text => {
+                // Parse file paths
+                const lines = text.trim().split('\n');
+                
+                lines.forEach(line => {
+                    const parts = line.split('/');
+                    if (parts.length === 2) {
+                        const category = parts[0];
+                        const filename = parts[1];
+                        
+                        if (category in imageCollections) {
+                            const dateStr = filename.replace(`${category}-`, '').replace('.jpg', '');
+                            const date = getDateFromString(dateStr);
+                            
+                            imageCollections[category].push({
+                                path: line,
+                                date: date,
+                                dateStr: dateStr
+                            });
+                        }
+                    }
+                });
+                
+                // Sort each collection by date
+                Object.keys(imageCollections).forEach(key => {
+                    imageCollections[key].sort((a, b) => a.date - b.date);
+                });
+                
+                // Create timeline of all unique dates
+                const dateSet = new Set();
+                Object.values(imageCollections).forEach(collection => {
+                    collection.forEach(item => {
+                        dateSet.add(item.date.getTime());
+                    });
+                });
+                
+                allDates = Array.from(dateSet).sort((a, b) => a - b);
+                
+                // Set up slider
+                setupSlider();
+                
+                // Set up controls
+                setupControls();
+                
+                // Preload images
+                preloadImages();
+            })
+            .catch(error => {
+                console.error('Error loading filenames.txt:', error);
+            });
+        
+        // Get date object from YYYYMMDD string
+        function getDateFromString(dateStr) {
+            const year = dateStr.substring(0, 4);
+            const month = dateStr.substring(4, 6);
+            const day = dateStr.substring(6, 8);
+            return new Date(`${year}-${month}-${day}`);
+        }
+        
+        // Format date as YYYY-MM-DD
+        function formatDate(date) {
+            return date.toISOString().split('T')[0];
+        }
+        
+        // Format date in a more readable format
+        function formatReadableDate(date) {
+            return date.toLocaleDateString('en-US', { 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            });
+        }
+        
+        // Set up slider
+        function setupSlider() {
+            const slider = document.getElementById('timeSlider');
+            const startDateEl = document.getElementById('startDate');
+            const endDateEl = document.getElementById('endDate');
+            const currentDateEl = document.getElementById('currentDate');
+            
+            if (allDates.length === 0) return;
+            
+            slider.max = allDates.length - 1;
+            
+            const firstDate = new Date(allDates[0]);
+            const lastDate = new Date(allDates[allDates.length - 1]);
+            
+            startDateEl.textContent = formatDate(firstDate);
+            endDateEl.textContent = formatDate(lastDate);
+            
+            // Update based on slider value
+            slider.addEventListener('input', () => {
+                // Stop animation if playing when user drags slider
+                if (isPlaying) {
+                    stopAnimation();
+                }
+                updateImages();
+            });
+            
+            // Add keyboard event listeners
+            document.addEventListener('keydown', handleKeyPress);
+            
+            // Initialize with first image
+            updateImages();
+        }
+        
+        // Set up play/pause controls
+        function setupControls() {
+            const playButton = document.getElementById('playButton');
+            const pauseButton = document.getElementById('pauseButton');
+            
+            playButton.addEventListener('click', startAnimation);
+            pauseButton.addEventListener('click', stopAnimation);
+        }
+        
+        // Start auto-advancing animation at 15 fps
+        function startAnimation() {
+            if (isPlaying) return;
+            
+            isPlaying = true;
+            const playButton = document.getElementById('playButton');
+            const pauseButton = document.getElementById('pauseButton');
+            
+            playButton.disabled = true;
+            pauseButton.disabled = false;
+            pauseButton.classList.add('active');
+            
+            animationInterval = setInterval(() => {
+                const slider = document.getElementById('timeSlider');
+                let currentValue = parseInt(slider.value);
+                
+                if (currentValue < allDates.length - 1) {
+                    slider.value = currentValue + 1;
+                    updateImages();
+                } else {
+                    // Reached the end, stop animation
+                    stopAnimation();
+                }
+            }, 67); // 67ms ≈ 15 fps
+        }
+        
+        // Stop animation
+        function stopAnimation() {
+            if (!isPlaying) return;
+            
+            isPlaying = false;
+            const playButton = document.getElementById('playButton');
+            const pauseButton = document.getElementById('pauseButton');
+            
+            if (animationInterval) {
+                clearInterval(animationInterval);
+                animationInterval = null;
+            }
+            
+            playButton.disabled = false;
+            pauseButton.disabled = true;
+            pauseButton.classList.remove('active');
+        }
+        
+        // Handle keyboard navigation
+        function handleKeyPress(e) {
+            const slider = document.getElementById('timeSlider');
+            let currentValue = parseInt(slider.value);
+            
+            if (e.key === 'ArrowLeft') {
+                // Stop animation and move backward one frame
+                stopAnimation();
+                if (currentValue > 0) {
+                    slider.value = currentValue - 1;
+                    updateImages();
+                }
+            } else if (e.key === 'ArrowRight') {
+                // Stop animation and move forward one frame
+                stopAnimation();
+                if (currentValue < allDates.length - 1) {
+                    slider.value = currentValue + 1;
+                    updateImages();
+                }
+            } else if (e.key === ' ') {
+                // Spacebar toggles play/pause
+                e.preventDefault();
+                if (isPlaying) {
+                    stopAnimation();
+                } else {
+                    startAnimation();
+                }
+            }
+        }
+        
+        // Find the nearest image to a given date
+        function findNearestImage(collection, targetDate, maxDiff = 30 * 24 * 60 * 60 * 1000) { // Default max diff is 30 days
+            if (collection.length === 0) return null;
+            
+            let nearestImage = null;
+            let minDiff = Infinity;
+            
+            for (const item of collection) {
+                const diff = Math.abs(item.date.getTime() - targetDate);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    nearestImage = item;
+                }
+            }
+            
+            // If the nearest image is more than maxDiff away, return null
+            if (minDiff > maxDiff) {
+                return null;
+            }
+            
+            return nearestImage;
+        }
+        
+        // Update all images based on current slider value
+        function updateImages() {
+            const slider = document.getElementById('timeSlider');
+            const currentDateEl = document.getElementById('currentDate');
+            
+            if (allDates.length === 0) return;
+            
+            const index = parseInt(slider.value);
+            const currentDate = new Date(allDates[index]);
+            
+            currentDateEl.textContent = formatReadableDate(currentDate);
+            
+            // Max difference of 30 days (in milliseconds)
+            const maxDiff = 30 * 24 * 60 * 60 * 1000;
+            
+            // Update each image
+            updateImage('capy', currentDate, maxDiff);
+            updateImage('dada', currentDate, maxDiff);
+            updateImage('mama', currentDate, maxDiff);
+            updateImage('platy', currentDate, maxDiff);
+        }
+        
+        // Update a specific image
+        function updateImage(category, currentDate, maxDiff) {
+            const imageEl = document.getElementById(`${category}Image`);
+            const noImageEl = document.getElementById(`${category}NoImage`);
+            const nearestImage = findNearestImage(imageCollections[category], currentDate.getTime(), maxDiff);
+            
+            if (nearestImage) {
+                // Use preloaded image if available, otherwise fallback to setting src
+                const preloadedImg = preloadedImages.get(nearestImage.path);
+                if (preloadedImg) {
+                    // Replace the img element's src with the preloaded image data
+                    imageEl.src = preloadedImg.src;
+                } else {
+                    // Fallback to direct path if preload failed
+                    imageEl.src = nearestImage.path;
+                }
+                imageEl.style.display = 'block';
+                noImageEl.style.display = 'none';
+            } else {
+                // If no image within maxDiff, show gray with text
+                imageEl.style.display = 'none';
+                noImageEl.style.display = 'block';
+                imageEl.parentElement.style.backgroundColor = '#ddd';
+            }
+        }
+        
+        // Preload images for smoother experience
+        function preloadImages() {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const loadingProgress = document.getElementById('loadingProgress');
+            const mainContent = document.getElementById('mainContent');
+            
+            // Count total images
+            let totalImages = 0;
+            Object.values(imageCollections).forEach(collection => {
+                totalImages += collection.length;
+            });
+            
+            if (totalImages === 0) {
+                // No images to load, hide overlay immediately
+                hideLoadingOverlay();
+                return;
+            }
+            
+            let loadedImages = 0;
+            loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
+            
+            // Create promises for all image loads
+            const imagePromises = [];
+            
+            Object.values(imageCollections).forEach(collection => {
+                collection.forEach(item => {
+                    const promise = new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            // Store the preloaded image in our cache
+                            preloadedImages.set(item.path, img);
+                            loadedImages++;
+                            loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
+                            resolve();
+                        };
+                        img.onerror = () => {
+                            loadedImages++;
+                            loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
+                            resolve(); // Resolve even on error to continue
+                        };
+                        img.src = item.path;
+                    });
+                    imagePromises.push(promise);
+                });
+            });
+            
+            // Wait for all images to load
+            Promise.all(imagePromises).then(() => {
+                hideLoadingOverlay();
+            });
+        }
+        
+        // Hide loading overlay with fade effect
+        function hideLoadingOverlay() {
+            const loadingOverlay = document.getElementById('loadingOverlay');
+            const mainContent = document.getElementById('mainContent');
+            
+            loadingOverlay.classList.add('fade-out');
+            mainContent.classList.add('loaded');
+            
+            // Remove overlay from DOM after fade completes
+            setTimeout(() => {
+                loadingOverlay.style.display = 'none';
+            }, 500);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+#!/bin/bash
+
+videos=("animated/capy.mp4" "animated/platy.mp4" "animated/mama.mp4" "animated/dada.mp4")
+
+durations=()
+for video in "${videos[@]}"; do
+    durations+=($(ffprobe -v error -show_entries format=duration \
+        -of csv=p=0 "$video"))
+done
+max_duration=$(printf "%s\n" "${durations[@]}" | sort -nr | head -n1)
+
+# Build filter_complex with delays
+filter_complex=""
+for i in "${!videos[@]}"; do
+    duration="${durations[i]}"
+    delay=$(echo "$max_duration - $duration" | bc)
+    quadrant="v$i"
+    filter_complex+="[${i}:v]tpad=start_duration=$delay[$quadrant];"
+done
+
+# Combine videos into a 4-up grid
+filter_complex+="[v0][v1]hstack[top]; [v2][v3]hstack[bottom]; [top][bottom]vstack[out]"
+
+ffmpeg -y -i "${videos[0]}" -i "${videos[1]}" -i "${videos[2]}" -i "${videos[3]}" \
+  -filter_complex "$filter_complex" -map "[out]" animated/4up.mp4
