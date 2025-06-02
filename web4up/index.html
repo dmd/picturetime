@@ -251,6 +251,7 @@
         
         // Preloaded image cache
         const preloadedImages = new Map();
+        const imageBlobs = new Map();
         
         // All dates in chronological order
         let allDates = [];
@@ -503,11 +504,12 @@
             const nearestImage = findNearestImage(imageCollections[category], currentDate.getTime(), maxDiff);
             
             if (nearestImage) {
-                // Use preloaded image if available, otherwise fallback to setting src
-                const preloadedImg = preloadedImages.get(nearestImage.path);
-                if (preloadedImg) {
-                    // Replace the img element's src with the preloaded image data
-                    imageEl.src = preloadedImg.src;
+                // Use blob URL if available to avoid network requests
+                const blobUrl = imageBlobs.get(nearestImage.path);
+                if (blobUrl) {
+                    if (imageEl.src !== blobUrl) {
+                        imageEl.src = blobUrl;
+                    }
                 } else {
                     // Fallback to direct path if preload failed
                     imageEl.src = nearestImage.path;
@@ -549,20 +551,34 @@
             Object.values(imageCollections).forEach(collection => {
                 collection.forEach(item => {
                     const promise = new Promise((resolve, reject) => {
-                        const img = new Image();
-                        img.onload = () => {
-                            // Store the preloaded image in our cache
-                            preloadedImages.set(item.path, img);
-                            loadedImages++;
-                            loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
-                            resolve();
-                        };
-                        img.onerror = () => {
-                            loadedImages++;
-                            loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
-                            resolve(); // Resolve even on error to continue
-                        };
-                        img.src = item.path;
+                        // Use fetch to get blob data for true caching
+                        fetch(item.path)
+                            .then(response => response.blob())
+                            .then(blob => {
+                                // Create blob URL for cached access
+                                const blobUrl = URL.createObjectURL(blob);
+                                imageBlobs.set(item.path, blobUrl);
+                                
+                                // Also create Image object for fallback
+                                const img = new Image();
+                                img.onload = () => {
+                                    preloadedImages.set(item.path, img);
+                                    loadedImages++;
+                                    loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
+                                    resolve();
+                                };
+                                img.onerror = () => {
+                                    loadedImages++;
+                                    loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
+                                    resolve();
+                                };
+                                img.src = blobUrl;
+                            })
+                            .catch(() => {
+                                loadedImages++;
+                                loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
+                                resolve(); // Resolve even on error to continue
+                            });
                     });
                     imagePromises.push(promise);
                 });
