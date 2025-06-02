@@ -69,13 +69,24 @@
             height: 100%;
             object-fit: cover;
             display: block;
+            opacity: 1;
+            transition: opacity 0.1s ease;
         }
         .no-image-text {
             font-size: 14px;
             color: #666;
             text-align: center;
             padding: 10px;
-            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: opacity 0.1s ease;
+            pointer-events: none;
+        }
+        .no-image-text.visible {
+            opacity: 1;
         }
         .image-label {
             position: absolute;
@@ -228,6 +239,7 @@
             <div class="date-controls">
                 <div class="controls-left">
                     <button id="playButton" class="control-button">▶</button>
+                    <button id="fastButton" class="control-button"><span style="letter-spacing: -0.2em;">▶▶</span></button>
                     <button id="pauseButton" class="control-button" disabled>⏸</button>
                 </div>
                 <div class="date-display" id="currentDate"></div>
@@ -252,13 +264,17 @@
         // Preloaded image cache
         const preloadedImages = new Map();
         const imageBlobs = new Map();
+        const currentImageSrcs = new Map();
         
         // All dates in chronological order
         let allDates = [];
         
         // Animation control
         let isPlaying = false;
-        let animationInterval = null;
+        let animationFrame = null;
+        let lastFrameTime = 0;
+        let targetFPS = 30;
+        let frameInterval = 1000 / targetFPS;
         
         // Initialize from filenames.txt
         fetch('filenames.txt')
@@ -372,36 +388,67 @@
         // Set up play/pause controls
         function setupControls() {
             const playButton = document.getElementById('playButton');
+            const fastButton = document.getElementById('fastButton');
             const pauseButton = document.getElementById('pauseButton');
             
-            playButton.addEventListener('click', startAnimation);
+            playButton.addEventListener('click', () => {
+                if (isPlaying) {
+                    stopAnimation();
+                }
+                targetFPS = 24;
+                frameInterval = 1000 / targetFPS;
+                startAnimation();
+            });
+            
+            fastButton.addEventListener('click', () => {
+                if (isPlaying) {
+                    stopAnimation();
+                }
+                targetFPS = 60;
+                frameInterval = 1000 / targetFPS;
+                startAnimation();
+            });
+            
             pauseButton.addEventListener('click', stopAnimation);
         }
         
-        // Start auto-advancing animation at 15 fps
+        // Start auto-advancing animation at target fps
         function startAnimation() {
-            if (isPlaying) return;
-            
             isPlaying = true;
             const playButton = document.getElementById('playButton');
+            const fastButton = document.getElementById('fastButton');
             const pauseButton = document.getElementById('pauseButton');
             
-            playButton.disabled = true;
+            playButton.disabled = false;
+            fastButton.disabled = false;
             pauseButton.disabled = false;
-            pauseButton.classList.add('active');
             
-            animationInterval = setInterval(() => {
+            lastFrameTime = performance.now();
+            animateFrame();
+        }
+        
+        // Animation frame function for smooth playback
+        function animateFrame(currentTime) {
+            if (!isPlaying) return;
+            
+            const deltaTime = currentTime - lastFrameTime;
+            
+            if (deltaTime >= frameInterval) {
                 const slider = document.getElementById('timeSlider');
                 let currentValue = parseInt(slider.value);
                 
                 if (currentValue < allDates.length - 1) {
                     slider.value = currentValue + 1;
                     updateImages();
+                    lastFrameTime = currentTime - (deltaTime % frameInterval);
                 } else {
                     // Reached the end, stop animation
                     stopAnimation();
+                    return;
                 }
-            }, 67); // 67ms ≈ 15 fps
+            }
+            
+            animationFrame = requestAnimationFrame(animateFrame);
         }
         
         // Stop animation
@@ -410,16 +457,17 @@
             
             isPlaying = false;
             const playButton = document.getElementById('playButton');
+            const fastButton = document.getElementById('fastButton');
             const pauseButton = document.getElementById('pauseButton');
             
-            if (animationInterval) {
-                clearInterval(animationInterval);
-                animationInterval = null;
+            if (animationFrame) {
+                cancelAnimationFrame(animationFrame);
+                animationFrame = null;
             }
             
             playButton.disabled = false;
+            fastButton.disabled = false;
             pauseButton.disabled = true;
-            pauseButton.classList.remove('active');
         }
         
         // Handle keyboard navigation
@@ -506,21 +554,27 @@
             if (nearestImage) {
                 // Use blob URL if available to avoid network requests
                 const blobUrl = imageBlobs.get(nearestImage.path);
-                if (blobUrl) {
-                    if (imageEl.src !== blobUrl) {
-                        imageEl.src = blobUrl;
-                    }
-                } else {
-                    // Fallback to direct path if preload failed
-                    imageEl.src = nearestImage.path;
+                const newSrc = blobUrl || nearestImage.path;
+                
+                // Only update src if it's actually different to avoid unnecessary DOM operations
+                const currentSrc = currentImageSrcs.get(category);
+                if (currentSrc !== newSrc) {
+                    imageEl.src = newSrc;
+                    currentImageSrcs.set(category, newSrc);
                 }
-                imageEl.style.display = 'block';
-                noImageEl.style.display = 'none';
+                
+                imageEl.style.opacity = '1';
+                noImageEl.classList.remove('visible');
             } else {
                 // If no image within maxDiff, show gray with text
-                imageEl.style.display = 'none';
-                noImageEl.style.display = 'block';
-                imageEl.parentElement.style.backgroundColor = '#ddd';
+                const noImageKey = `${category}_no_image`;
+                const currentSrc = currentImageSrcs.get(category);
+                if (currentSrc !== noImageKey) {
+                    imageEl.style.opacity = '0';
+                    noImageEl.classList.add('visible');
+                    imageEl.parentElement.style.backgroundColor = '#ddd';
+                    currentImageSrcs.set(category, noImageKey);
+                }
             }
         }
         
