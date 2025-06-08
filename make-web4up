@@ -26,4 +26,5 @@ done
   find * -type f -name '*.jpg' > filenames.txt
 )
 
+find web4up/ -name '*.jpg' | sed 's|^web4up/||' > web4up/filenames.txt
 rsync -r --delete web4up/ 3e.org:3e.org/timelapse/
