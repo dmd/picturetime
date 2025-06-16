@@ -120,7 +120,7 @@ def classify_image(image_path):
         else:
             return image_path, "Unable to classify", thumbnail
     except Exception as e:
-        print(f"Error calling Anthropic API: {e}")
+        print(f"Error calling API: {e}")
         return image_path, "Error in classification process", None
 
 
