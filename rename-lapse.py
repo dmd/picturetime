@@ -2,8 +2,7 @@
 
 import sys
 import os
-import anthropic
-from anthropic import Anthropic
+import argparse
 from base64 import b64encode
 from PIL import Image, ExifTags
 import io
@@ -16,6 +15,16 @@ import tempfile
 import sixel
 import signal
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+try:
+    from anthropic import Anthropic
+except ImportError:
+    Anthropic = None
+
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 
 def get_key():
@@ -75,39 +84,65 @@ def resize_image(image_path, scale_factor=0.2):
         return None, None
 
 
-def classify_image(image_path):
-    client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-
+def classify_image(image_path, use_openai=False):
     base64_image, thumbnail = resize_image(image_path)
     if base64_image is None:
         return image_path, "Unable to process image", None
 
     try:
-        response = client.messages.create(
-            model="claude-3-5-sonnet-20240620",
-            max_tokens=1000,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": base64_image,
+        if use_openai:
+            if OpenAI is None:
+                raise ImportError("OpenAI library not installed")
+            client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+            response = client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                },
                             },
-                        },
-                        {
-                            "type": "text",
-                            "text": "Is this person an adult male, adult female, child with glasses, or child without glasses? Reply with only exactly one of those options or 'unable to classify'. Do not reply with any other text whatsoever.",
-                        },
-                    ],
-                }
-            ],
-        )
-
-        classification = response.content[0].text.strip().lower()
+                            {
+                                "type": "text",
+                                "text": "Is this person an adult male, adult female, child with glasses, or child without glasses? Reply with only exactly one of those options or 'unable to classify'. Do not reply with any other text whatsoever.",
+                            },
+                        ],
+                    }
+                ],
+            )
+            classification = response.choices[0].message.content.strip().lower()
+        else:
+            if Anthropic is None:
+                raise ImportError("Anthropic library not installed")
+            client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            response = client.messages.create(
+                model="claude-3-5-sonnet-20240620",
+                max_tokens=1000,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": base64_image,
+                                },
+                            },
+                            {
+                                "type": "text",
+                                "text": "Is this person an adult male, adult female, child with glasses, or child without glasses? Reply with only exactly one of those options or 'unable to classify'. Do not reply with any other text whatsoever.",
+                            },
+                        ],
+                    }
+                ],
+            )
+            classification = response.content[0].text.strip().lower()
 
         if classification == "adult male":
             return image_path, "dada", thumbnail
@@ -124,7 +159,7 @@ def classify_image(image_path):
         return image_path, "Error in classification process", None
 
 
-def process_images():
+def process_images(use_openai=False):
     image_paths = glob.glob("I*.jpeg")
     if not image_paths:
         print("No images matching I* found.")
@@ -133,7 +168,7 @@ def process_images():
 
     with ThreadPoolExecutor(max_workers=5) as executor:
         future_to_image = {
-            executor.submit(classify_image, image_path): image_path
+            executor.submit(classify_image, image_path, use_openai): image_path
             for image_path in image_paths
         }
         try:
@@ -176,4 +211,12 @@ def process_images():
 
 
 if __name__ == "__main__":
-    process_images()
+    parser = argparse.ArgumentParser(description="Classify and rename images using AI")
+    parser.add_argument(
+        "--openai",
+        action="store_true",
+        help="Use OpenAI API instead of Anthropic (default)",
+    )
+    args = parser.parse_args()
+
+    process_images(use_openai=args.openai)
