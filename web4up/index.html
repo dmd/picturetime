@@ -542,7 +542,17 @@
                 if (isPlaying) {
                     stopAnimation();
                 }
-                targetFPS = 24;
+                
+                // Check if slider is at the end, if so reset to beginning
+                const slider = document.getElementById('timeSlider');
+                const maxValue = currentMode === 'daily' ? allDates.length - 1 : allYears.length - 1;
+                if (parseInt(slider.value) >= maxValue) {
+                    slider.value = 0;
+                    updateImages();
+                }
+                
+                // Set play speed based on mode
+                targetFPS = currentMode === 'yearly' ? 1.5 : 24;
                 frameInterval = 1000 / targetFPS;
                 startAnimation();
             });
@@ -551,7 +561,17 @@
                 if (isPlaying) {
                     stopAnimation();
                 }
-                targetFPS = 60;
+                
+                // Check if slider is at the end, if so reset to beginning
+                const slider = document.getElementById('timeSlider');
+                const maxValue = currentMode === 'daily' ? allDates.length - 1 : allYears.length - 1;
+                if (parseInt(slider.value) >= maxValue) {
+                    slider.value = 0;
+                    updateImages();
+                }
+                
+                // Set fast play speed based on mode
+                targetFPS = currentMode === 'yearly' ? 3 : 60;
                 frameInterval = 1000 / targetFPS;
                 startAnimation();
             });
