@@ -157,6 +157,56 @@
             color: #777;
             margin-top: 5px;
         }
+        .mode-switch {
+            margin-bottom: 15px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .switch-container {
+            position: relative;
+            width: 200px;
+            height: 40px;
+            background-color: #e0e0e0;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+        .switch-slider {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 96px;
+            height: 36px;
+            background-color: white;
+            border-radius: 18px;
+            transition: transform 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        .switch-slider.yearly {
+            transform: translateX(100px);
+        }
+        .switch-labels {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            position: relative;
+            z-index: 1;
+        }
+        .switch-label {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            transition: color 0.3s ease;
+            user-select: none;
+        }
+        .switch-label.active {
+            color: #333;
+        }
         .loading-overlay {
             position: fixed;
             top: 0;
@@ -236,6 +286,15 @@
             </div>
         </div>
         <div class="slider-container">
+            <div class="mode-switch">
+                <div class="switch-container" id="modeSwitch">
+                    <div class="switch-slider" id="switchSlider"></div>
+                    <div class="switch-labels">
+                        <div class="switch-label active" id="dailyLabel">Daily</div>
+                        <div class="switch-label" id="yearlyLabel">Yearly</div>
+                    </div>
+                </div>
+            </div>
             <div class="date-controls">
                 <div class="controls-left">
                     <button id="playButton" class="control-button">▶</button>
@@ -261,6 +320,14 @@
             platy: []
         };
         
+        // Averages collections
+        const averageCollections = {
+            capy: [],
+            dada: [],
+            mama: [],
+            platy: []
+        };
+        
         // Preloaded image cache
         const preloadedImages = new Map();
         const imageBlobs = new Map();
@@ -268,6 +335,10 @@
         
         // All dates in chronological order
         let allDates = [];
+        let allYears = [];
+        
+        // Current mode (daily or yearly)
+        let currentMode = 'daily';
         
         // Animation control
         let isPlaying = false;
@@ -275,6 +346,9 @@
         let lastFrameTime = 0;
         let targetFPS = 30;
         let frameInterval = 1000 / targetFPS;
+        
+        // Initialize mode switch
+        setupModeSwitch();
         
         // Initialize from filenames.txt
         fetch('filenames.txt')
@@ -317,6 +391,9 @@
                 
                 allDates = Array.from(dateSet).sort((a, b) => a - b);
                 
+                // Load averages after daily images are loaded
+                loadAverages();
+                
                 // Set up slider
                 setupSlider();
                 
@@ -329,6 +406,31 @@
             .catch(error => {
                 console.error('Error loading filenames.txt:', error);
             });
+        
+        // Load averages from averages directory
+        function loadAverages() {
+            // Generate expected average filenames based on years present in daily data
+            const yearSet = new Set();
+            Object.values(imageCollections).forEach(collection => {
+                collection.forEach(item => {
+                    yearSet.add(item.date.getFullYear());
+                });
+            });
+            
+            allYears = Array.from(yearSet).sort((a, b) => a - b);
+            
+            // Load average files for each subject and year
+            Object.keys(averageCollections).forEach(subject => {
+                allYears.forEach(year => {
+                    const filename = `averages/${subject}_avg_${year}.jpg`;
+                    averageCollections[subject].push({
+                        path: filename,
+                        year: year,
+                        yearStr: year.toString()
+                    });
+                });
+            });
+        }
         
         // Get date object from YYYYMMDD string
         function getDateFromString(dateStr) {
@@ -352,6 +454,36 @@
             });
         }
         
+        // Set up mode switch
+        function setupModeSwitch() {
+            const modeSwitch = document.getElementById('modeSwitch');
+            const switchSlider = document.getElementById('switchSlider');
+            const dailyLabel = document.getElementById('dailyLabel');
+            const yearlyLabel = document.getElementById('yearlyLabel');
+            
+            modeSwitch.addEventListener('click', () => {
+                if (currentMode === 'daily') {
+                    currentMode = 'yearly';
+                    switchSlider.classList.add('yearly');
+                    dailyLabel.classList.remove('active');
+                    yearlyLabel.classList.add('active');
+                } else {
+                    currentMode = 'daily';
+                    switchSlider.classList.remove('yearly');
+                    yearlyLabel.classList.remove('active');
+                    dailyLabel.classList.add('active');
+                }
+                
+                // Stop animation when switching modes
+                if (isPlaying) {
+                    stopAnimation();
+                }
+                
+                // Update slider and images for new mode
+                setupSlider();
+            });
+        }
+        
         // Set up slider
         function setupSlider() {
             const slider = document.getElementById('timeSlider');
@@ -359,18 +491,33 @@
             const endDateEl = document.getElementById('endDate');
             const currentDateEl = document.getElementById('currentDate');
             
-            if (allDates.length === 0) return;
+            if (currentMode === 'daily') {
+                if (allDates.length === 0) return;
+                
+                slider.max = allDates.length - 1;
+                slider.value = 0;
+                
+                const firstDate = new Date(allDates[0]);
+                const lastDate = new Date(allDates[allDates.length - 1]);
+                
+                startDateEl.textContent = formatDate(firstDate);
+                endDateEl.textContent = formatDate(lastDate);
+            } else {
+                if (allYears.length === 0) return;
+                
+                slider.max = allYears.length - 1;
+                slider.value = 0;
+                
+                startDateEl.textContent = allYears[0].toString();
+                endDateEl.textContent = allYears[allYears.length - 1].toString();
+            }
             
-            slider.max = allDates.length - 1;
+            // Remove existing event listeners
+            const newSlider = slider.cloneNode(true);
+            slider.parentNode.replaceChild(newSlider, slider);
             
-            const firstDate = new Date(allDates[0]);
-            const lastDate = new Date(allDates[allDates.length - 1]);
-            
-            startDateEl.textContent = formatDate(firstDate);
-            endDateEl.textContent = formatDate(lastDate);
-            
-            // Update based on slider value
-            slider.addEventListener('input', () => {
+            // Add new event listener
+            newSlider.addEventListener('input', () => {
                 // Stop animation if playing when user drags slider
                 if (isPlaying) {
                     stopAnimation();
@@ -436,8 +583,9 @@
             if (deltaTime >= frameInterval) {
                 const slider = document.getElementById('timeSlider');
                 let currentValue = parseInt(slider.value);
+                const maxValue = currentMode === 'daily' ? allDates.length - 1 : allYears.length - 1;
                 
-                if (currentValue < allDates.length - 1) {
+                if (currentValue < maxValue) {
                     slider.value = currentValue + 1;
                     updateImages();
                     lastFrameTime = currentTime - (deltaTime % frameInterval);
@@ -474,6 +622,7 @@
         function handleKeyPress(e) {
             const slider = document.getElementById('timeSlider');
             let currentValue = parseInt(slider.value);
+            const maxValue = currentMode === 'daily' ? allDates.length - 1 : allYears.length - 1;
             
             if (e.key === 'ArrowLeft') {
                 // Stop animation and move backward one frame
@@ -485,7 +634,7 @@
             } else if (e.key === 'ArrowRight') {
                 // Stop animation and move forward one frame
                 stopAnimation();
-                if (currentValue < allDates.length - 1) {
+                if (currentValue < maxValue) {
                     slider.value = currentValue + 1;
                     updateImages();
                 }
@@ -528,21 +677,36 @@
             const slider = document.getElementById('timeSlider');
             const currentDateEl = document.getElementById('currentDate');
             
-            if (allDates.length === 0) return;
-            
-            const index = parseInt(slider.value);
-            const currentDate = new Date(allDates[index]);
-            
-            currentDateEl.textContent = formatReadableDate(currentDate);
-            
-            // Max difference of 30 days (in milliseconds)
-            const maxDiff = 30 * 24 * 60 * 60 * 1000;
-            
-            // Update each image
-            updateImage('capy', currentDate, maxDiff);
-            updateImage('dada', currentDate, maxDiff);
-            updateImage('mama', currentDate, maxDiff);
-            updateImage('platy', currentDate, maxDiff);
+            if (currentMode === 'daily') {
+                if (allDates.length === 0) return;
+                
+                const index = parseInt(slider.value);
+                const currentDate = new Date(allDates[index]);
+                
+                currentDateEl.textContent = formatReadableDate(currentDate);
+                
+                // Max difference of 30 days (in milliseconds)
+                const maxDiff = 30 * 24 * 60 * 60 * 1000;
+                
+                // Update each image
+                updateImage('capy', currentDate, maxDiff);
+                updateImage('dada', currentDate, maxDiff);
+                updateImage('mama', currentDate, maxDiff);
+                updateImage('platy', currentDate, maxDiff);
+            } else {
+                if (allYears.length === 0) return;
+                
+                const index = parseInt(slider.value);
+                const currentYear = allYears[index];
+                
+                currentDateEl.textContent = currentYear.toString();
+                
+                // Update each image with yearly average
+                updateYearlyImage('capy', currentYear);
+                updateYearlyImage('dada', currentYear);
+                updateYearlyImage('mama', currentYear);
+                updateYearlyImage('platy', currentYear);
+            }
         }
         
         // Update a specific image
@@ -578,13 +742,62 @@
             }
         }
         
+        // Update a specific image for yearly mode
+        function updateYearlyImage(category, currentYear) {
+            const imageEl = document.getElementById(`${category}Image`);
+            const noImageEl = document.getElementById(`${category}NoImage`);
+            const yearlyImage = averageCollections[category].find(item => item.year === currentYear);
+            
+            if (yearlyImage) {
+                // Use blob URL if available to avoid network requests
+                const blobUrl = imageBlobs.get(yearlyImage.path);
+                const newSrc = blobUrl || yearlyImage.path;
+                
+                // Only update src if it's actually different to avoid unnecessary DOM operations
+                const currentSrc = currentImageSrcs.get(category);
+                if (currentSrc !== newSrc) {
+                    imageEl.src = newSrc;
+                    currentImageSrcs.set(category, newSrc);
+                    
+                    // Handle image load errors for averages that might not exist
+                    imageEl.onerror = () => {
+                        const noImageKey = `${category}_no_yearly_${currentYear}`;
+                        if (currentImageSrcs.get(category) === newSrc) {
+                            imageEl.style.opacity = '0';
+                            noImageEl.classList.add('visible');
+                            imageEl.parentElement.style.backgroundColor = '#ddd';
+                            currentImageSrcs.set(category, noImageKey);
+                        }
+                    };
+                    
+                    imageEl.onload = () => {
+                        imageEl.style.opacity = '1';
+                        noImageEl.classList.remove('visible');
+                    };
+                }
+                
+                imageEl.style.opacity = '1';
+                noImageEl.classList.remove('visible');
+            } else {
+                // If no yearly average, show gray with text
+                const noImageKey = `${category}_no_yearly_${currentYear}`;
+                const currentSrc = currentImageSrcs.get(category);
+                if (currentSrc !== noImageKey) {
+                    imageEl.style.opacity = '0';
+                    noImageEl.classList.add('visible');
+                    imageEl.parentElement.style.backgroundColor = '#ddd';
+                    currentImageSrcs.set(category, noImageKey);
+                }
+            }
+        }
+        
         // Preload images for smoother experience
         function preloadImages() {
             const loadingOverlay = document.getElementById('loadingOverlay');
             const loadingProgress = document.getElementById('loadingProgress');
             const mainContent = document.getElementById('mainContent');
             
-            // Count total images
+            // Count total images (only daily images for progress)
             let totalImages = 0;
             Object.values(imageCollections).forEach(collection => {
                 totalImages += collection.length;
@@ -602,6 +815,7 @@
             // Create promises for all image loads
             const imagePromises = [];
             
+            // Preload daily images
             Object.values(imageCollections).forEach(collection => {
                 collection.forEach(item => {
                     const promise = new Promise((resolve, reject) => {
@@ -633,6 +847,36 @@
                                 loadingProgress.textContent = `${loadedImages} / ${totalImages}`;
                                 resolve(); // Resolve even on error to continue
                             });
+                    });
+                    imagePromises.push(promise);
+                });
+            });
+            
+            // Preload yearly averages (but don't count them in progress since they might not exist)
+            Object.values(averageCollections).forEach(collection => {
+                collection.forEach(item => {
+                    const promise = new Promise((resolve, reject) => {
+                        fetch(item.path)
+                            .then(response => {
+                                if (response.ok) {
+                                    return response.blob();
+                                } else {
+                                    throw new Error('Average image not found');
+                                }
+                            })
+                            .then(blob => {
+                                const blobUrl = URL.createObjectURL(blob);
+                                imageBlobs.set(item.path, blobUrl);
+                                
+                                const img = new Image();
+                                img.onload = () => {
+                                    preloadedImages.set(item.path, img);
+                                    resolve();
+                                };
+                                img.onerror = () => resolve();
+                                img.src = blobUrl;
+                            })
+                            .catch(() => resolve()); // Resolve even on error
                     });
                     imagePromises.push(promise);
                 });

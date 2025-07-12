@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Compute yearly mean portraits for each subject directory.
+# Outputs are placed in ./averages/<subject>/.
+
+set -euo pipefail
+shopt -s nullglob
+
+subjects=(capy dada mama platy)
+outdir="web4up/averages"
+mkdir -p "$outdir"
+
+for subject in "${subjects[@]}"; do
+    [[ -d "aligned/$subject" ]] || { echo "Skipping $subject (no such dir)"; continue; }
+
+    declare -A years_seen=()
+
+    # Discover years present for this subject
+    for img in "aligned/$subject/$subject"-*.jpg; do
+        year=${img#*$subject-}
+        year=${year:0:4}
+        years_seen["$year"]=1
+    done
+
+    # Produce one mean image per year
+    for year in "${!years_seen[@]}"; do
+        imgs=( "aligned/$subject"/"$subject"-"$year"*.jpg )
+        [[ ${#imgs[@]} -eq 0 ]] && continue
+        magick "${imgs[@]}" -evaluate-sequence mean \
+               -resize "300x400" "$outdir/${subject}_avg_${year}.jpg"
+        echo "$subject $year → $outdir/${subject}_avg_${year}.jpg"
+    done
+
+    unset years_seen
+done
