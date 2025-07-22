@@ -1,4 +1,8 @@
-#!/Users/dmd/Library/CloudStorage/Dropbox-Personal/dashare/timelapse/classify/bin/python
+#!/usr/bin/env -S uv run --script
+#
+# /// script
+# dependencies = ['pillow', 'sixel', 'piexif']
+# ///
 
 import sys
 import os
