@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 #
 # /// script
-# dependencies = ['pillow', 'sixel', 'piexif']
+# dependencies = ['pillow', 'sixel', 'piexif', 'anthropic']
 # ///
 
 import sys
