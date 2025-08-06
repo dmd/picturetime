@@ -13,10 +13,7 @@ find "$SRC_DIR" -type f -name '*.jpg' | while read -r SRC_PATH; do
   mkdir -p "$(dirname "$DST_PATH")"
 
   # Skip resizing if the destination image already exists
-  if [[ -f "$DST_PATH" ]]; then
-    echo "Skipping existing image: $DST_PATH" >&2
-  else
-    # Use ImageMagick 7 'magick' command (convert is deprecated)
+  if [[ ! -f "$DST_PATH" ]]; then
     magick "$SRC_PATH" -resize "${WIDTH}x${HEIGHT}" "$DST_PATH"
   fi
 done

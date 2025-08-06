@@ -9,19 +9,25 @@ if ! docker ps --format "table {{.Names}}" | grep -q "^alignfacehttp$"; then
     exit 1
 fi
 
-for i in capy/*jpg dada/*jpg mama/*jpg platy/*jpg
+shopt -s nullglob
+for i in originals/capy/*.jpg originals/dada/*.jpg originals/mama/*.jpg originals/platy/*.jpg
 do
-    if [ ! -f aligned/$i ]; then
-        curl -X POST -F file=@originals/$i -F distance=90 -F width=600 -F height=800 http://localhost:15000/align --output aligned/$i
-    else
-        echo skipping aligned/$i, already exists
+    if [ -f "$i" ]; then
+        rel_path="${i#originals/}"
+        output_path="aligned/$rel_path"
+        if [ ! -f "$output_path" ]; then
+            mkdir -p "$(dirname "$output_path")"
+            curl -X POST -F "file=@$i" -F distance=90 -F width=600 -F height=800 http://localhost:15000/align --output "$output_path"
+        else
+            echo "skipping $output_path, already exists"
+        fi
     fi
 done
 
 for i in capy dada mama platy
 do
   pushd aligned/$i
-  ffmpeg -y -f image2 -framerate 12 -pattern_type glob -export_path_metadata 1 -i '*.jpg' -vf "tpad=start_mode=clone:start_duration=2:stop_mode=clone:stop_duration=2,drawtext=text='%{metadata\:lavf.image2dec.source_basename\:NA}'" ../../animated/$i.mp4
+  ffmpeg -hide_banner -loglevel error -y -f image2 -framerate 12 -pattern_type glob -export_path_metadata 1 -i '*.jpg' -vf "tpad=start_mode=clone:start_duration=2:stop_mode=clone:stop_duration=2,drawtext=text='%{metadata\:lavf.image2dec.source_basename\:NA}'" ../../animated/$i.mp4
   popd
 done
 

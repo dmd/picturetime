@@ -21,5 +21,6 @@ done
 # Combine videos into a 4-up grid
 filter_complex+="[v0][v1]hstack[top]; [v2][v3]hstack[bottom]; [top][bottom]vstack[out]"
 
-ffmpeg -y -i "${videos[0]}" -i "${videos[1]}" -i "${videos[2]}" -i "${videos[3]}" \
+echo "Creating 4-up from: ${videos[0]} ${videos[1]} ${videos[2]} ${videos[3]}"
+ffmpeg -hide_banner -loglevel error -y -i "${videos[0]}" -i "${videos[1]}" -i "${videos[2]}" -i "${videos[3]}" \
   -filter_complex "$filter_complex" -map "[out]" animated/4up.mp4
