@@ -3,3 +3,7 @@ aligned/
 animated/
 classify/
 originals/
+*.jpg
+*.jpeg
+*.mp4
+web4up/filenames.txt
