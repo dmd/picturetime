@@ -45,6 +45,3 @@ averages:
 # Build everything (align, averages, videos, web)
 build: align averages videos web
 
-# Clean up containers and temp files
-clean:
-    just stop-align
