@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 #
 # /// script
-# dependencies = ['pillow', 'sixel', 'piexif', 'anthropic']
+# dependencies = ['pillow', 'sixel', 'piexif', 'anthropic', 'openai']
 # ///
 
 import sys
@@ -124,7 +124,7 @@ def classify_image(image_path, use_openai=False):
                 raise ImportError("Anthropic library not installed")
             client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
             response = client.messages.create(
-                model="claude-3-5-sonnet-20240620",
+                model="claude-3-7-sonnet-20250219",
                 max_tokens=1000,
                 messages=[
                     {
@@ -190,14 +190,49 @@ def process_images(use_openai=False):
             print(f"Couldn't determine date for {image_path}. Skipping...")
             continue
 
-        if classification not in ["dada", "mama", "capy", "platy"]:
-            print(f"Error classifying image {image_path}. Skipping...")
-            continue
+        manual_label = False
 
-        if thumbnail:
+        if classification not in ["dada", "mama", "capy", "platy"]:
+            print(f"Error classifying image {image_path}.")
+            if thumbnail:
+                with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+                    thumbnail.save(tmp.name, format="PNG")
+                    sixel.converter.SixelConverter(tmp.name).write(sys.stdout)
+
+            print("Choose: (c)apy, (m)ama, (d)ada, or (p)laty: ", end="", flush=True)
+            user_choice = get_key()
+            print(user_choice)
+
+            if user_choice == "c":
+                classification = "capy"
+                manual_label = True
+            elif user_choice == "m":
+                classification = "mama"
+                manual_label = True
+            elif user_choice == "d":
+                classification = "dada"
+                manual_label = True
+            elif user_choice == "p":
+                classification = "platy"
+                manual_label = True
+            else:
+                print("Invalid choice. Skipping...")
+                continue
+
+        if (
+            thumbnail
+            and classification in ["dada", "mama", "capy", "platy"]
+            and not manual_label
+        ):
             with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
                 thumbnail.save(tmp.name, format="PNG")
                 sixel.converter.SixelConverter(tmp.name).write(sys.stdout)
+        new_filename = f"originals/{classification}/{classification}-{date_taken}.jpg"
+
+        if manual_label:
+            os.rename(image_path, new_filename)
+            print(f"Renamed to {new_filename}")
+            continue
 
         print(f"{classification}? (y/n) ", end="", flush=True)
 
@@ -205,9 +240,6 @@ def process_images(use_openai=False):
         print(user_input)
 
         if user_input == "y":
-            new_filename = (
-                f"originals/{classification}/{classification}-{date_taken}.jpg"
-            )
             os.rename(image_path, new_filename)
             print(f"Renamed to {new_filename}")
         else:
