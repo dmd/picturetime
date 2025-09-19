@@ -11,8 +11,18 @@ classify *args:
 # Start alignment service
 start-align:
     #!/usr/bin/env bash
-    if ! docker ps | grep -q "alignfacehttp"; then
-        if ! docker images | grep -q "alignfacehttp"; then
+    if ! command -v docker >/dev/null 2>&1; then
+        echo "Error: Docker CLI not found. Please install Docker and try again." >&2
+        exit 1
+    fi
+
+    if ! docker info >/dev/null 2>&1; then
+        echo "Error: Docker daemon is not running. Start Docker and retry." >&2
+        exit 1
+    fi
+
+    if ! docker ps --filter "name=^alignfacehttp$" --filter "status=running" --quiet | grep -q .; then
+        if ! docker image inspect alignfacehttp >/dev/null 2>&1; then
             echo "Building alignment service..."
             cd alignfacehttp && docker build -t alignfacehttp --force-rm .
         fi
@@ -44,4 +54,3 @@ averages:
 
 # Build everything (align, averages, videos, web)
 build: align averages videos web
-
