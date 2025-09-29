@@ -124,7 +124,7 @@ def classify_image(image_path, use_openai=False):
                 raise ImportError("Anthropic library not installed")
             client = Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
             response = client.messages.create(
-                model="claude-sonnet-4-20250514",
+                model="claude-sonnet-4-5-20250929",
                 max_tokens=1000,
                 messages=[
                     {
