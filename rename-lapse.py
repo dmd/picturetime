@@ -7,7 +7,7 @@
 import sys
 import os
 import argparse
-from base64 import b64encode
+from base64 import b64encode, standard_b64encode
 from PIL import Image, ExifTags
 import io
 import glob
@@ -18,7 +18,119 @@ import tty
 import tempfile
 import sixel
 import signal
+import select
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
+
+# Graphics protocol detection
+GRAPHICS_PROTOCOL = None  # Will be set to 'kitty', 'sixel', or None
+
+
+def detect_graphics_protocol():
+    """Detect terminal graphics protocol support. Prefer kitty over sixel."""
+    global GRAPHICS_PROTOCOL
+
+    # First try kitty protocol detection
+    if detect_kitty_support():
+        GRAPHICS_PROTOCOL = "kitty"
+        return
+
+    # Then try sixel detection
+    if detect_sixel_support():
+        GRAPHICS_PROTOCOL = "sixel"
+        return
+
+    GRAPHICS_PROTOCOL = None
+
+
+def detect_kitty_support():
+    """Detect kitty graphics protocol support via environment variables."""
+    # Check for KITTY_WINDOW_ID environment variable (set by kitty)
+    if os.environ.get("KITTY_WINDOW_ID"):
+        return True
+
+    # Check TERM_PROGRAM for known kitty-protocol terminals
+    term_program = os.environ.get("TERM_PROGRAM", "")
+    if term_program in ("ghostty", "kitty"):
+        return True
+
+    return False
+
+
+def detect_sixel_support():
+    """Detect sixel support using DA1 escape sequence or known terminal."""
+    # Known sixel-supporting terminals
+    term_program = os.environ.get("TERM_PROGRAM", "")
+    if term_program in ("iTerm.app", "WezTerm", "mintty"):
+        return True
+
+    if not sys.stdin.isatty() or not sys.stdout.isatty():
+        return False
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        # Send DA1 (Primary Device Attributes) query
+        sys.stdout.write("\x1b[c")
+        sys.stdout.flush()
+
+        response = ""
+        while True:
+            if select.select([sys.stdin], [], [], 0.1)[0]:
+                ch = sys.stdin.read(1)
+                response += ch
+                if ch == "c":
+                    break
+            else:
+                break
+
+        # Sixel support is indicated by "4" in the response parameters
+        # Response format: ESC [ ? Ps ; Ps ; ... c
+        # 4 indicates sixel graphics support
+        return ";4;" in response or ";4c" in response or "?4;" in response
+    except Exception:
+        return False
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+
+def display_image_kitty(image):
+    """Display image using kitty graphics protocol."""
+    # Convert to PNG in memory
+    buffered = io.BytesIO()
+    image.save(buffered, format="PNG")
+    data = standard_b64encode(buffered.getvalue()).decode("ascii")
+
+    # Send image in chunks (kitty protocol limit is 4096 bytes per chunk)
+    chunk_size = 4096
+    chunks = [data[i : i + chunk_size] for i in range(0, len(data), chunk_size)]
+
+    for i, chunk in enumerate(chunks):
+        is_last = i == len(chunks) - 1
+        m = 0 if is_last else 1  # m=1 means more chunks coming
+        if i == 0:
+            # First chunk: include all parameters
+            sys.stdout.write(f"\x1b_Gf=100,a=T,m={m};{chunk}\x1b\\")
+        else:
+            # Subsequent chunks: only m parameter
+            sys.stdout.write(f"\x1b_Gm={m};{chunk}\x1b\\")
+
+    sys.stdout.write("\n")
+    sys.stdout.flush()
+
+
+def display_image(image):
+    """Display image using the detected graphics protocol."""
+    if GRAPHICS_PROTOCOL == "kitty":
+        display_image_kitty(image)
+    elif GRAPHICS_PROTOCOL == "sixel":
+        with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
+            image.save(tmp.name, format="PNG")
+            sixel.converter.SixelConverter(tmp.name).write(sys.stdout)
+        print()  # newline after sixel image
+    else:
+        print("[Image display not supported in this terminal]")
 
 try:
     from anthropic import Anthropic
@@ -195,9 +307,7 @@ def process_images(use_openai=False):
         if classification not in ["dada", "mama", "capy", "platy"]:
             print(f"Error classifying image {image_path}.")
             if thumbnail:
-                with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
-                    thumbnail.save(tmp.name, format="PNG")
-                    sixel.converter.SixelConverter(tmp.name).write(sys.stdout)
+                display_image(thumbnail)
 
             print("Choose: (c)apy, (m)ama, (d)ada, or (p)laty: ", end="", flush=True)
             user_choice = get_key()
@@ -224,9 +334,7 @@ def process_images(use_openai=False):
             and classification in ["dada", "mama", "capy", "platy"]
             and not manual_label
         ):
-            with tempfile.NamedTemporaryFile(suffix=".png") as tmp:
-                thumbnail.save(tmp.name, format="PNG")
-                sixel.converter.SixelConverter(tmp.name).write(sys.stdout)
+            display_image(thumbnail)
         new_filename = f"originals/{classification}/{classification}-{date_taken}.jpg"
 
         if manual_label:
@@ -255,4 +363,5 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    detect_graphics_protocol()
     process_images(use_openai=args.openai)
