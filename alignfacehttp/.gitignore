@@ -35,5 +35,8 @@ venv
 __pycache__
 .idea
 
+# Frozen docker image (synced via Dropbox, not git)
+alignfacehttp-image.tar.gz
+
 
 
